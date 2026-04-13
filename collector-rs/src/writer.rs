@@ -18,16 +18,6 @@ use crate::models::{
 };
 use crate::time::ns_to_dt_string;
 
-#[derive(Debug, Default)]
-struct WriterTotals {
-    market_metadata: u64,
-    polymarket_events_raw: u64,
-    binance_events_raw: u64,
-    polymarket_market_events: u64,
-    polymarket_trades: u64,
-    polymarket_book_snapshots: u64,
-}
-
 pub async fn run_parquet_writer(
     data_dir: PathBuf,
     flush_interval_secs: u64,
@@ -40,7 +30,6 @@ pub async fn run_parquet_writer(
     let mut market_event_rows = Vec::new();
     let mut trade_rows = Vec::new();
     let mut book_rows = Vec::new();
-    let mut totals = WriterTotals::default();
     let mut interval = tokio::time::interval(Duration::from_secs(flush_interval_secs));
 
     loop {
@@ -55,8 +44,6 @@ pub async fn run_parquet_writer(
                         &mut market_event_rows,
                         &mut trade_rows,
                         &mut book_rows,
-                        &mut totals,
-                        "channel_closed",
                     )?;
                     break;
                 };
@@ -77,8 +64,6 @@ pub async fn run_parquet_writer(
                         &mut market_event_rows,
                         &mut trade_rows,
                         &mut book_rows,
-                        &mut totals,
-                        "shutdown",
                     )?;
                         break;
                     }
@@ -99,8 +84,6 @@ pub async fn run_parquet_writer(
                         &mut market_event_rows,
                         &mut trade_rows,
                         &mut book_rows,
-                        &mut totals,
-                        "batch_size",
                     )?;
                 }
             }
@@ -113,8 +96,6 @@ pub async fn run_parquet_writer(
                     &mut market_event_rows,
                     &mut trade_rows,
                     &mut book_rows,
-                    &mut totals,
-                    "interval",
                 )?;
             }
         }
@@ -131,81 +112,32 @@ fn flush_all(
     market_event_rows: &mut Vec<PolymarketMarketEventRow>,
     trade_rows: &mut Vec<PolymarketTradeRow>,
     book_rows: &mut Vec<BookSnapshotRow>,
-    totals: &mut WriterTotals,
-    trigger: &str,
 ) -> Result<()> {
     if !metadata_rows.is_empty() {
         write_market_metadata(data_dir, metadata_rows)?;
-        totals.market_metadata += metadata_rows.len() as u64;
-        log_flush("market_metadata", metadata_rows.len(), totals.market_metadata, trigger);
         metadata_rows.clear();
     }
     if !polymarket_raw_rows.is_empty() {
         write_polymarket_raw_events(data_dir, polymarket_raw_rows)?;
-        totals.polymarket_events_raw += polymarket_raw_rows.len() as u64;
-        log_flush(
-            "polymarket_events_raw",
-            polymarket_raw_rows.len(),
-            totals.polymarket_events_raw,
-            trigger,
-        );
         polymarket_raw_rows.clear();
     }
     if !binance_rows.is_empty() {
         write_binance_events(data_dir, binance_rows)?;
-        totals.binance_events_raw += binance_rows.len() as u64;
-        log_flush(
-            "binance_events_raw",
-            binance_rows.len(),
-            totals.binance_events_raw,
-            trigger,
-        );
         binance_rows.clear();
     }
     if !market_event_rows.is_empty() {
         write_polymarket_market_events(data_dir, market_event_rows)?;
-        totals.polymarket_market_events += market_event_rows.len() as u64;
-        log_flush(
-            "polymarket_market_events",
-            market_event_rows.len(),
-            totals.polymarket_market_events,
-            trigger,
-        );
         market_event_rows.clear();
     }
     if !trade_rows.is_empty() {
         write_polymarket_trades(data_dir, trade_rows)?;
-        totals.polymarket_trades += trade_rows.len() as u64;
-        log_flush(
-            "polymarket_trades",
-            trade_rows.len(),
-            totals.polymarket_trades,
-            trigger,
-        );
         trade_rows.clear();
     }
     if !book_rows.is_empty() {
         write_book_snapshots(data_dir, book_rows)?;
-        totals.polymarket_book_snapshots += book_rows.len() as u64;
-        log_flush(
-            "polymarket_book_snapshots",
-            book_rows.len(),
-            totals.polymarket_book_snapshots,
-            trigger,
-        );
         book_rows.clear();
     }
     Ok(())
-}
-
-fn log_flush(table_name: &str, rows: usize, total_rows: u64, trigger: &str) {
-    info!(
-        table = table_name,
-        rows,
-        total_rows,
-        trigger,
-        "parquet flush completed"
-    );
 }
 
 fn write_market_metadata(data_dir: &Path, rows: &[MarketMetadataRow]) -> Result<()> {
@@ -544,5 +476,6 @@ fn write_batch(dir: PathBuf, schema: Arc<Schema>, batch: RecordBatch) -> Result<
     let mut writer = ArrowWriter::try_new(file, schema, Some(props))?;
     writer.write(&batch)?;
     writer.close()?;
+    info!("parquet batch flushed");
     Ok(())
 }

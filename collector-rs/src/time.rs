@@ -15,11 +15,3 @@ pub fn ns_to_dt_string(ts_ns: i64) -> String {
         .format("%Y-%m-%d")
         .to_string()
 }
-
-pub fn ts_to_utc_string(ts: i64) -> String {
-    Utc.timestamp_opt(ts, 0)
-        .single()
-        .unwrap_or_else(Utc::now)
-        .format("%Y-%m-%d %H:%M:%S UTC")
-        .to_string()
-}

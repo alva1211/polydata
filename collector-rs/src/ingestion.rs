@@ -12,7 +12,7 @@ use tracing::{info, warn};
 
 use crate::config::Settings;
 use crate::models::{IngestedEvent, MarketInfo, TrackingPlan};
-use crate::time::{now_ns, ts_to_utc_string};
+use crate::time::now_ns;
 
 struct MarketWorkerHandle {
     market: MarketInfo,
@@ -91,13 +91,7 @@ fn sync_workers(
             }
         });
 
-        info!(
-            market_slug = %market.market_slug,
-            market_window = %format_market_window(&market),
-            yes_token_id = %market.yes_token_id,
-            no_token_id = %market.no_token_id,
-            "starting polymarket worker"
-        );
+        info!(market_slug = market.market_slug, "starting polymarket worker");
         workers.insert(
             slug,
             MarketWorkerHandle {
@@ -218,18 +212,4 @@ fn split_payloads(value: Value) -> Vec<Value> {
         Value::Array(items) => items,
         other => vec![other],
     }
-}
-
-fn format_market_window(market: &MarketInfo) -> String {
-    let start = market
-        .market_end_ts
-        .map(|end_ts| end_ts - 300)
-        .or(market.market_start_ts)
-        .map(ts_to_utc_string)
-        .unwrap_or_else(|| "unknown-start".to_string());
-    let end = market
-        .market_end_ts
-        .map(ts_to_utc_string)
-        .unwrap_or_else(|| "unknown-end".to_string());
-    format!("{} -> {}", start, end)
 }

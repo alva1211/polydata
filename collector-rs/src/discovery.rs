@@ -11,7 +11,7 @@ use tracing::{info, warn};
 
 use crate::config::Settings;
 use crate::models::{BookCommand, MarketInfo, MarketMetadataRow, TrackingPlan, WriterCommand};
-use crate::time::{now_ns, ts_to_utc_string};
+use crate::time::now_ns;
 
 pub struct MarketDiscovery {
     settings: Arc<Settings>,
@@ -80,11 +80,7 @@ impl MarketDiscovery {
                             .cloned()
                             .collect();
 
-                        info!(
-                            tracked_markets = ?plan.slugs(),
-                            tracking_windows = %format_tracking_plan(&plan),
-                            "updated tracking plan"
-                        );
+                        info!(tracked_markets = ?plan.slugs(), "updated tracking plan");
                         plan_tx.send_replace(plan.clone());
 
                         for market in &updated {
@@ -300,13 +296,6 @@ impl MarketDiscovery {
     }
 
     async fn bootstrap_book(&self, market: &MarketInfo, book_tx: &mpsc::Sender<BookCommand>) -> Result<()> {
-        info!(
-            market_slug = %market.market_slug,
-            market_window = %format_market_window(market),
-            yes_token_id = %market.yes_token_id,
-            no_token_id = %market.no_token_id,
-            "bootstrapping market books from CLOB REST"
-        );
         for (token_id, asset_side) in [
             (market.yes_token_id.clone(), "YES"),
             (market.no_token_id.clone(), "NO"),
@@ -477,30 +466,4 @@ fn book_has_liquidity(book: &Value) -> bool {
         .map(|levels| !levels.is_empty())
         .unwrap_or(false);
     bids && asks
-}
-
-fn format_tracking_plan(plan: &TrackingPlan) -> String {
-    if plan.markets.is_empty() {
-        return "[]".to_string();
-    }
-
-    plan.markets
-        .iter()
-        .map(|market| format!("{} [{}]", market.market_slug, format_market_window(market)))
-        .collect::<Vec<_>>()
-        .join(" | ")
-}
-
-fn format_market_window(market: &MarketInfo) -> String {
-    let start = market
-        .market_end_ts
-        .map(|end_ts| end_ts - 300)
-        .or(market.market_start_ts)
-        .map(ts_to_utc_string)
-        .unwrap_or_else(|| "unknown-start".to_string());
-    let end = market
-        .market_end_ts
-        .map(ts_to_utc_string)
-        .unwrap_or_else(|| "unknown-end".to_string());
-    format!("{} -> {}", start, end)
 }
